@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { TreeNode as TreeNodeType, PivotColumn } from '@/types/pivot';
 import TreeNode from './TreeNode';
@@ -10,6 +9,23 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 
+// Sample data for fallback when API fails
+const SAMPLE_COLUMNS = [
+  "report_name", 
+  "category", 
+  "project", 
+  "created_by", 
+  "updated_date"
+];
+
+const SAMPLE_VALUES = {
+  report_name: ['Sales Report', 'Marketing Dashboard', 'Financial Summary', 'Operations Overview', 'Customer Analytics'],
+  category: ['Analytics', 'Operations', 'Finance', 'Marketing', 'HR', 'IT'],
+  project: ['Project A', 'Project B', 'Project C', 'Project D', 'Project E'],
+  created_by: ['John Smith', 'Jane Doe', 'Alex Johnson', 'Maria Garcia', 'Robert Chen'],
+  updated_date: ['2023-01-15', '2023-02-20', '2023-03-25', '2023-04-10', '2023-05-05']
+};
+
 const PivotTree: React.FC = () => {
   const { toast } = useToast();
   const [columns, setColumns] = useState<PivotColumn[]>([]);
@@ -18,12 +34,13 @@ const PivotTree: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
-    // For demo purposes, we'll add sample columns if the API fails
+    // Load columns on component mount
     const loadColumns = async () => {
       try {
         setLoading(true);
         const columnsData = await fetchColumns();
         setColumns(columnsData.map(col => ({ name: col, selected: false })));
+        console.log("API columns loaded:", columnsData);
       } catch (error) {
         console.error('Failed to load columns:', error);
         toast({
@@ -33,14 +50,8 @@ const PivotTree: React.FC = () => {
         });
         
         // Sample columns if API fails
-        const sampleColumns = [
-          "report_name", 
-          "category", 
-          "project", 
-          "created_by", 
-          "updated_date"
-        ];
-        setColumns(sampleColumns.map(col => ({ name: col, selected: false })));
+        setColumns(SAMPLE_COLUMNS.map(col => ({ name: col, selected: false })));
+        console.log("Using sample columns:", SAMPLE_COLUMNS);
       } finally {
         setLoading(false);
       }
@@ -77,70 +88,73 @@ const PivotTree: React.FC = () => {
 
     try {
       setLoading(true);
-      let currentNodes: TreeNodeType[] = [];
-      let conditions: Record<string, string> = {};
-
-      for (let i = 0; i < selectedColumns.length; i++) {
-        const column = selectedColumns[i];
+      const rootColumn = selectedColumns[0];
+      
+      try {
+        // Try to fetch values from API
+        const values = await fetchUniqueValues({ column: rootColumn });
         
-        try {
-          const values = await fetchUniqueValues({ 
-            column, 
-            conditions: i > 0 ? conditions : undefined 
-          });
+        // Create root level nodes
+        const rootNodes = values.map(value => ({
+          id: `${rootColumn}-${value}`,
+          label: value,
+          level: 0,
+          expanded: false,
+          column: rootColumn,
+          value,
+          children: [],
+          isLeaf: selectedColumns.length === 1
+        }));
+        
+        console.log("API data loaded for tree:", rootNodes);
+        setTreeData(rootNodes);
+        
+      } catch (apiError) {
+        console.error('API error, using sample data:', apiError);
+        
+        // Use sample data for the root level
+        const sampleValues = SAMPLE_VALUES[rootColumn as keyof typeof SAMPLE_VALUES] || 
+          ['Value 1', 'Value 2', 'Value 3'];
+        
+        // Create root level nodes with sample data
+        const sampleNodes = sampleValues.map(value => ({
+          id: `${rootColumn}-${value}`,
+          label: value,
+          level: 0,
+          expanded: false,
+          column: rootColumn,
+          value,
+          children: selectedColumns.length > 1 ? [] : undefined,
+          isLeaf: selectedColumns.length === 1
+        }));
+        
+        console.log("Using sample data for tree:", sampleNodes);
+        setTreeData(sampleNodes);
+        
+        // If we have more than one selected column, add sample children to the first node
+        if (selectedColumns.length > 1) {
+          const childColumn = selectedColumns[1];
+          const childValues = SAMPLE_VALUES[childColumn as keyof typeof SAMPLE_VALUES] || 
+            ['Child 1', 'Child 2', 'Child 3'];
           
-          if (i === 0) {
-            // Root level
-            currentNodes = values.map(value => ({
-              id: `${column}-${value}`,
-              label: value,
-              level: 0,
+          // Add children to the first root node for demonstration
+          if (sampleNodes.length > 0) {
+            sampleNodes[0].children = childValues.map(childValue => ({
+              id: `${childColumn}-${childValue}`,
+              label: childValue,
+              level: 1,
               expanded: false,
-              column,
-              value,
-              children: []
+              column: childColumn,
+              value: childValue,
+              children: selectedColumns.length > 2 ? [] : undefined,
+              isLeaf: selectedColumns.length === 2
             }));
-            setTreeData(currentNodes);
-          } else {
-            // Subsequent levels - we would need to recursively build the tree
-            // This is simplified for now
+            
+            // Automatically expand the first node to show children
+            sampleNodes[0].expanded = true;
           }
-        } catch (apiError) {
-          // If API fails, use sample data
-          console.error('API error, using sample data:', apiError);
           
-          const getSampleValues = (col: string): string[] => {
-            switch(col) {
-              case 'report_name': 
-                return ['Sales Report', 'Marketing Dashboard', 'Financial Summary'];
-              case 'category': 
-                return ['Analytics', 'Operations', 'Finance'];
-              case 'project': 
-                return ['Project A', 'Project B', 'Project C'];
-              case 'created_by': 
-                return ['John Smith', 'Jane Doe', 'Alex Johnson'];
-              case 'updated_date': 
-                return ['2023-01-15', '2023-02-20', '2023-03-25'];
-              default: 
-                return ['Value 1', 'Value 2', 'Value 3'];
-            }
-          };
-          
-          const sampleValues = getSampleValues(column);
-          
-          if (i === 0) {
-            // Root level with sample data
-            currentNodes = sampleValues.map(value => ({
-              id: `${column}-${value}`,
-              label: value,
-              level: 0,
-              expanded: false,
-              column,
-              value,
-              children: []
-            }));
-            setTreeData(currentNodes);
-          }
+          setTreeData([...sampleNodes]);
         }
       }
     } catch (error) {
@@ -193,6 +207,84 @@ const PivotTree: React.FC = () => {
     setTreeData(selectNode(treeData));
   };
 
+  // Add a function to dynamically load children when a node is expanded
+  const handleNodeExpand = async (nodeId: string, node: TreeNodeType) => {
+    if (!node.children || node.children.length > 0 || !node.column) {
+      return; // Skip if children are already loaded
+    }
+    
+    const nodeIndex = selectedColumns.indexOf(node.column);
+    if (nodeIndex >= selectedColumns.length - 1) {
+      return; // No more columns to expand
+    }
+    
+    const childColumn = selectedColumns[nodeIndex + 1];
+    const conditions = { [node.column]: node.value || '' };
+    
+    try {
+      // Try API call first
+      const values = await fetchUniqueValues({ 
+        column: childColumn,
+        conditions
+      });
+      
+      const childNodes = values.map(value => ({
+        id: `${childColumn}-${value}`,
+        label: value,
+        level: node.level + 1,
+        expanded: false,
+        column: childColumn,
+        value,
+        children: nodeIndex + 1 < selectedColumns.length - 1 ? [] : undefined,
+        isLeaf: nodeIndex + 1 === selectedColumns.length - 1
+      }));
+      
+      // Update the tree with the new children
+      setTreeData(prevTree => updateTreeNodeChildren(prevTree, nodeId, childNodes));
+      
+    } catch (error) {
+      // Fallback to sample data
+      console.error('Failed to load child values:', error);
+      
+      const sampleValues = SAMPLE_VALUES[childColumn as keyof typeof SAMPLE_VALUES] || 
+        ['Child 1', 'Child 2', 'Child 3'];
+        
+      const sampleChildNodes = sampleValues.map(value => ({
+        id: `${childColumn}-${value}-${Math.random().toString(36).substring(2, 8)}`, // Add random suffix to ensure unique IDs
+        label: value,
+        level: node.level + 1,
+        expanded: false,
+        column: childColumn,
+        value,
+        children: nodeIndex + 1 < selectedColumns.length - 1 ? [] : undefined,
+        isLeaf: nodeIndex + 1 === selectedColumns.length - 1
+      }));
+      
+      // Update the tree with sample children
+      setTreeData(prevTree => updateTreeNodeChildren(prevTree, nodeId, sampleChildNodes));
+    }
+  };
+  
+  // Helper function to update children of a specific node in the tree
+  const updateTreeNodeChildren = (
+    tree: TreeNodeType[], 
+    nodeId: string, 
+    children: TreeNodeType[]
+  ): TreeNodeType[] => {
+    return tree.map(node => {
+      if (node.id === nodeId) {
+        return { ...node, children };
+      }
+      if (node.children && node.children.length > 0) {
+        return {
+          ...node,
+          children: updateTreeNodeChildren(node.children, nodeId, children)
+        };
+      }
+      return node;
+    });
+  };
+
   return (
     <div className="flex flex-col lg:flex-row gap-6 w-full">
       {/* Column Selection Panel */}
@@ -218,6 +310,12 @@ const PivotTree: React.FC = () => {
                   </label>
                 </div>
               ))}
+              {columns.length === 0 && !loading && (
+                <div className="text-sm text-gray-500">No columns available</div>
+              )}
+              {loading && (
+                <div className="text-sm text-gray-500">Loading columns...</div>
+              )}
             </div>
           </ScrollArea>
           <Separator className="my-4" />
@@ -257,7 +355,13 @@ const PivotTree: React.FC = () => {
                 <TreeNode 
                   key={node.id}
                   node={node}
-                  onToggle={handleNodeToggle}
+                  onToggle={(id) => {
+                    handleNodeToggle(id);
+                    const toggledNode = findNodeById(treeData, id);
+                    if (toggledNode && !toggledNode.expanded) {
+                      handleNodeExpand(id, toggledNode);
+                    }
+                  }}
                   onSelect={handleNodeSelect}
                 />
               ))}
@@ -275,6 +379,22 @@ const PivotTree: React.FC = () => {
       </Card>
     </div>
   );
+};
+
+// Helper function to find a node by ID in the tree
+const findNodeById = (nodes: TreeNodeType[], nodeId: string): TreeNodeType | null => {
+  for (const node of nodes) {
+    if (node.id === nodeId) {
+      return node;
+    }
+    if (node.children && node.children.length > 0) {
+      const foundNode = findNodeById(node.children, nodeId);
+      if (foundNode) {
+        return foundNode;
+      }
+    }
+  }
+  return null;
 };
 
 export default PivotTree;
