@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { TreeNode as TreeNodeType, PivotColumn } from '@/types/pivot';
 import TreeNode from './TreeNode';
@@ -192,7 +191,40 @@ const PivotTree: React.FC = () => {
     setTreeData(selectNode(treeData));
   };
 
-  // Add a function to dynamically load children when a node is expanded
+  const collectConditions = (node: TreeNodeType | null, tree: TreeNodeType[]): Record<string, string> => {
+    if (!node) {
+      return {};
+    }
+
+    const conditions: Record<string, string> = {};
+    if (node.column && node.value) {
+      conditions[node.column] = node.value;
+    }
+
+    const parent = findParentNode(tree, node.id);
+    if (parent) {
+      const parentConditions = collectConditions(parent, tree);
+      return { ...parentConditions, ...conditions };
+    }
+
+    return conditions;
+  };
+
+  const findParentNode = (nodes: TreeNodeType[], nodeId: string): TreeNodeType | null => {
+    for (const node of nodes) {
+      if (node.children && node.children.some(child => child.id === nodeId)) {
+        return node;
+      }
+      if (node.children) {
+        const foundInChildren = findParentNode(node.children, nodeId);
+        if (foundInChildren) {
+          return foundInChildren;
+        }
+      }
+    }
+    return null;
+  };
+
   const handleNodeExpand = async (nodeId: string, node: TreeNodeType) => {
     if (!node.children || node.children.length > 0 || !node.column) {
       return; // Skip if children are already loaded
@@ -204,17 +236,18 @@ const PivotTree: React.FC = () => {
     }
     
     const childColumn = selectedColumns[nodeIndex + 1];
-    const conditions = { [node.column]: node.value || '' };
+    
+    const conditions = collectConditions(node, treeData);
+    console.log("Fetching with accumulated conditions:", conditions);
     
     try {
-      // Try API call first
       const values = await fetchUniqueValues({ 
         column: childColumn,
         conditions
       });
       
       const childNodes = values.map(value => ({
-        id: `${childColumn}-${value}-${nodeId}`, // Add parent ID to ensure unique IDs
+        id: `${childColumn}-${value}-${nodeId}`,
         label: value,
         level: node.level + 1,
         expanded: false,
@@ -224,18 +257,15 @@ const PivotTree: React.FC = () => {
         isLeaf: nodeIndex + 1 === selectedColumns.length - 1
       }));
       
-      // Update the tree with the new children
       setTreeData(prevTree => updateTreeNodeChildren(prevTree, nodeId, childNodes));
       
     } catch (error) {
-      // Fallback to sample data
       console.error('Failed to load child values:', error);
       
-      // Use conditional sample data based on parent
       const sampleValues = getConditionalSampleData(node.column, node.value || '', childColumn);
         
       const sampleChildNodes = sampleValues.map(value => ({
-        id: `${childColumn}-${value}-${nodeId}`, // Add parent ID to ensure unique IDs
+        id: `${childColumn}-${value}-${nodeId}`,
         label: value,
         level: node.level + 1,
         expanded: false,
@@ -245,12 +275,10 @@ const PivotTree: React.FC = () => {
         isLeaf: nodeIndex + 1 === selectedColumns.length - 1
       }));
       
-      // Update the tree with sample children
       setTreeData(prevTree => updateTreeNodeChildren(prevTree, nodeId, sampleChildNodes));
     }
   };
-  
-  // Helper function to update children of a specific node in the tree
+
   const updateTreeNodeChildren = (
     tree: TreeNodeType[], 
     nodeId: string, 
@@ -272,7 +300,6 @@ const PivotTree: React.FC = () => {
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 w-full">
-      {/* Column Selection Panel */}
       <Card className="w-full lg:w-1/3">
         <CardHeader>
           <CardTitle>Select Columns</CardTitle>
@@ -328,7 +355,6 @@ const PivotTree: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Tree View Panel */}
       <Card className="w-full lg:w-2/3">
         <CardHeader>
           <CardTitle>Pivot Tree</CardTitle>
@@ -366,7 +392,6 @@ const PivotTree: React.FC = () => {
   );
 };
 
-// Helper function to find a node by ID in the tree
 const findNodeById = (nodes: TreeNodeType[], nodeId: string): TreeNodeType | null => {
   for (const node of nodes) {
     if (node.id === nodeId) {
