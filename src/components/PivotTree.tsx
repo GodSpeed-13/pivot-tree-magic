@@ -1,30 +1,14 @@
+
 import React, { useEffect, useState } from 'react';
 import { TreeNode as TreeNodeType, PivotColumn } from '@/types/pivot';
 import TreeNode from './TreeNode';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { fetchColumns, fetchUniqueValues } from '@/services/apiService';
+import { fetchColumns, fetchUniqueValues, getSampleData, getConditionalSampleData } from '@/services/apiService';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-
-// Sample data for fallback when API fails
-const SAMPLE_COLUMNS = [
-  "report_name", 
-  "category", 
-  "project", 
-  "created_by", 
-  "updated_date"
-];
-
-const SAMPLE_VALUES = {
-  report_name: ['Sales Report', 'Marketing Dashboard', 'Financial Summary', 'Operations Overview', 'Customer Analytics'],
-  category: ['Analytics', 'Operations', 'Finance', 'Marketing', 'HR', 'IT'],
-  project: ['Project A', 'Project B', 'Project C', 'Project D', 'Project E'],
-  created_by: ['John Smith', 'Jane Doe', 'Alex Johnson', 'Maria Garcia', 'Robert Chen'],
-  updated_date: ['2023-01-15', '2023-02-20', '2023-03-25', '2023-04-10', '2023-05-05']
-};
 
 const PivotTree: React.FC = () => {
   const { toast } = useToast();
@@ -32,6 +16,7 @@ const PivotTree: React.FC = () => {
   const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
   const [treeData, setTreeData] = useState<TreeNodeType[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const { SAMPLE_COLUMNS, SAMPLE_VALUES } = getSampleData();
 
   useEffect(() => {
     // Load columns on component mount
@@ -229,7 +214,7 @@ const PivotTree: React.FC = () => {
       });
       
       const childNodes = values.map(value => ({
-        id: `${childColumn}-${value}`,
+        id: `${childColumn}-${value}-${nodeId}`, // Add parent ID to ensure unique IDs
         label: value,
         level: node.level + 1,
         expanded: false,
@@ -246,11 +231,11 @@ const PivotTree: React.FC = () => {
       // Fallback to sample data
       console.error('Failed to load child values:', error);
       
-      const sampleValues = SAMPLE_VALUES[childColumn as keyof typeof SAMPLE_VALUES] || 
-        ['Child 1', 'Child 2', 'Child 3'];
+      // Use conditional sample data based on parent
+      const sampleValues = getConditionalSampleData(node.column, node.value || '', childColumn);
         
       const sampleChildNodes = sampleValues.map(value => ({
-        id: `${childColumn}-${value}-${Math.random().toString(36).substring(2, 8)}`, // Add random suffix to ensure unique IDs
+        id: `${childColumn}-${value}-${nodeId}`, // Add parent ID to ensure unique IDs
         label: value,
         level: node.level + 1,
         expanded: false,
