@@ -340,9 +340,9 @@ const PivotTree = () => {
               <div className="flex flex-wrap gap-2">
                 {availableColumns
                   .filter(col => col.selected)
-                  .map(column => (
-                    <Badge key={column.name} variant="secondary">
-                      {column.name}
+                  .map((column, index) => (
+                    <Badge key={column.name} variant="secondary" className="flex items-center">
+                      <span className="mr-1">{index + 1}.</span> {column.name}
                       <button 
                         className="ml-1 rounded-full hover:bg-muted p-0.5"
                         onClick={() => handleColumnToggle(column)}
